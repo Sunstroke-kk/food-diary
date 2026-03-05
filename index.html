@@ -801,6 +801,31 @@ async function sbFetch(method, path, body) {
   return res.status === 204 ? null : res.json();
 }
 
+// ─── Keepalive (prevents Supabase free tier from pausing) ───────────────
+function startKeepalive() {
+  const FIVE_DAYS = 5 * 24 * 60 * 60 * 1000;
+  const lastPing  = parseInt(localStorage.getItem('kks_last_ping') || '0');
+  const now       = Date.now();
+
+  // Ping immediately if it's been more than 5 days
+  if (now - lastPing > FIVE_DAYS) {
+    pingSupabase();
+  }
+
+  // Then check every hour
+  setInterval(() => {
+    const last = parseInt(localStorage.getItem('kks_last_ping') || '0');
+    if (Date.now() - last > FIVE_DAYS) pingSupabase();
+  }, 60 * 60 * 1000);
+}
+
+async function pingSupabase() {
+  try {
+    await sbFetch('GET', `${TABLE}?limit=1`);
+    localStorage.setItem('kks_last_ping', Date.now().toString());
+  } catch (e) {}
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────
 async function init() {
   currentUser = localStorage.getItem('kks_user');
@@ -862,6 +887,9 @@ function showApp() {
       renderFeed();
     } catch (e) { setSyncStatus(false); }
   }, 30000);
+
+  // Keep Supabase alive
+  startKeepalive();
 }
 
 function changeUser() {
